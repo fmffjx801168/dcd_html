@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>课程目标达成度计算工具</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- SheetJS for Excel handling -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 1200px;
+        }
+        .btn-group {
+            gap: 10px;
+        }
+        .status-message {
+            min-height: 60px;
+        }
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin-top: 20px;
+        }
+        .data-table {
+            margin-top: 20px;
+        }
+        .table-responsive {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        .alert {
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="card shadow-lg">
+            <div class="card-header bg-primary text-white text-center">
+                <h1 class="display-4">课程目标达成度计算工具</h1>
+            </div>
+            <div class="card-body">
+                <!-- 按钮区域 -->
+                <div class="d-flex flex-wrap justify-content-center btn-group mb-4">
+                    <button id="exportTemplateBtn" class="btn btn-info btn-lg">
+                        <i class="bi bi-file-earmark-spreadsheet"></i> 导出Excel模板
+                    </button>
+                    <button id="importBtn" class="btn btn-success btn-lg">
+                        <i class="bi bi-upload"></i> 导入Excel
+                    </button>
+                    <button id="calculateBtn" class="btn btn-primary btn-lg" disabled>
+                        <i class="bi bi-calculator"></i> 计算达成度
+                    </button>
+                    <button id="exportResultsBtn" class="btn btn-warning btn-lg" disabled>
+                        <i class="bi bi-download"></i> 导出结果
+                    </button>
+                    <button id="plotBtn" class="btn btn-danger btn-lg" disabled>
+                        <i class="bi bi-bar-chart"></i> 绘图显示
+                    </button>
+                </div>
+
+                <!-- 状态信息 -->
+                <div class="alert alert-info text-center status-message" id="statusMessage">
+                    请导入符合模板的Excel文件
+                </div>
+
+                <!-- 考核方式占比显示 -->
+                <div class="alert alert-secondary text-center" id="assessmentWeights">
+                    考核方式占比：
+                </div>
+
+                <!-- 达成度阈值设置 -->
+                <div class="form-group row">
+                    <label for="thresholdInput" class="col-sm-3 col-form-label text-end">达成度阈值设置：</label>
+                    <div class="col-sm-6">
+                        <input type="number" class="form-control" id="thresholdInput" value="0.65" step="0.01" min="0" max="1">
+                    </div>
+                    <div class="col-sm-3">
+                        <span class="form-text text-muted">例如：0.65</span>
+                    </div>
+                </div>
+
+                <!-- 隐藏的文件输入 -->
+                <input type="file" id="fileInput" accept=".xlsx,.xls" style="display: none;">
+
+                <!-- 结果显示区域 -->
+                <div id="resultsArea" class="mt-4">
+                    <!-- 结果将在这里显示 -->
+                </div>
+
+                <!-- 图表显示区域 -->
+                <div id="chartArea" class="mt-4">
+                    <!-- 标签页导航 -->
+                    <ul class="nav nav-tabs" id="chartTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="directAchievement-tab" data-bs-toggle="tab" data-bs-target="#directAchievement" type="button" role="tab" aria-controls="directAchievement" aria-selected="true">课程目标直接达成度</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="indirectAchievement-tab" data-bs-toggle="tab" data-bs-target="#indirectAchievement" type="button" role="tab" aria-controls="indirectAchievement" aria-selected="false">课程目标间接达成度</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="achievementHistogram-tab" data-bs-toggle="tab" data-bs-target="#achievementHistogram" type="button" role="tab" aria-controls="achievementHistogram" aria-selected="false">达成度分布直方图</button>
+                        </li>
+                        <!-- 散点图标签将在这里动态添加 -->
+                    </ul>
+                    <div class="tab-content">
+                        <!-- 直接达成度柱状图 -->
+                        <div class="tab-pane fade show active" id="directAchievement">
+                            <div class="chart-container">
+                                <canvas id="directAchievementChart"></canvas>
+                            </div>
+                        </div>
+                        <!-- 间接达成度柱状图 -->
+                        <div class="tab-pane fade" id="indirectAchievement">
+                            <div class="chart-container">
+                                <canvas id="indirectAchievementChart"></canvas>
+                            </div>
+                        </div>
+                        <!-- 达成度分布直方图 -->
+                        <div class="tab-pane fade" id="achievementHistogram">
+                            <div class="chart-container">
+                                <canvas id="achievementHistogramChart"></canvas>
+                            </div>
+                        </div>
+                        <!-- 散点图标签页将在这里动态添加 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.min.css" rel="stylesheet">
+    <script>
+        // 全局变量
+        let calculator = null;
+        let achievementChart = null;
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            // 绑定事件
+            document.getElementById('importBtn').addEventListener('click', function() {
+                document.getElementById('fileInput').click();
+            });
+
+            document.getElementById('fileInput').addEventListener('change', importExcel);
+            document.getElementById('exportTemplateBtn').addEventListener('click', exportTemplate);
+            document.getElementById('calculateBtn').addEventListener('click', calculateAchievement);
+            document.getElementById('exportResultsBtn').addEventListener('click', exportResults);
+            document.getElementById('plotBtn').addEventListener('click', showPlots);
+
+            // 初始化图表区域（默认隐藏）
+            document.getElementById('chartArea').style.display = 'none';
+        });
+
+        // 导入Excel文件
+        function importExcel(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            try {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const arrayBuffer = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+
+                    // 解析Excel数据
+                    const parsedData = parseExcelData(workbook);
+                    
+                    // 创建计算器实例
+                    calculator = new AchievementCalculator(parsedData);
+
+                    // 验证数据
+                    const validationResult = calculator.validate_data();
+                    if (!validationResult.valid) {
+                        showAlert('warning', validationResult.message);
+                        return;
+                    }
+
+                    // 显示考核方式占比
+                    displayAssessmentWeights(calculator.data['考核方式比重']);
+
+                    // 更新状态
+                    showAlert('success', `已成功导入Excel文件: ${file.name}`);
+                    
+                    // 启用按钮
+                    document.getElementById('calculateBtn').disabled = false;
+                    document.getElementById('exportResultsBtn').disabled = true;
+                    document.getElementById('plotBtn').disabled = true;
+                };
+                reader.readAsArrayBuffer(file);
+            } catch (error) {
+                showAlert('danger', `文件导入错误: ${error.message}`);
+            }
+        }
+
+        // 解析Excel数据
+        function parseExcelData(workbook) {
+            const data = {
+                '课程信息': {},
+                '学生成绩': {},
+                '考核方式比重': {
+                    '考核方式': [],
+                    '占比': {}
+                },
+                '课程目标与考核方式权重矩阵': {
+                    '目标': [],
+                    '权重': {}
+                },
+                '间接达成度': {}
+            };
+
+            // 根据工作表名称获取数据
+            const sheetNames = workbook.SheetNames;
+            
+            // 读取课程信息工作表
+            const courseInfoSheet = workbook.Sheets[sheetNames.find(name => name.includes('课程信息') || name.includes('课程基本信息'))];
+            if (courseInfoSheet) {
+                const courseInfoData = XLSX.utils.sheet_to_json(courseInfoSheet);
+                courseInfoData.forEach(row => {
+                    for (const [key, value] of Object.entries(row)) {
+                        if (value) {
+                            data['课程信息'][key] = value;
+                        }
+                    }
+                });
+            }
+
+            // 读取学生成绩工作表
+            const studentScoresSheet = workbook.Sheets[sheetNames.find(name => name.includes('学生成绩') || name.includes('成绩'))];
+            if (studentScoresSheet) {
+                const studentScoresData = XLSX.utils.sheet_to_json(studentScoresSheet);
+                studentScoresData.forEach(row => {
+                    const studentId = row['学号'] || row['序号'] || row['ID'];
+                    const studentName = row['姓名'];
+                    if (studentId && studentName) {
+                        const scores = {};
+                        for (const [key, value] of Object.entries(row)) {
+                            if (key !== '学号' && key !== '姓名' && key !== '序号' && key !== 'ID' && !isNaN(value)) {
+                                scores[key] = parseFloat(value);
+                            }
+                        }
+                        data['学生成绩'][studentId] = {
+                            '姓名': studentName,
+                            '成绩': scores
+                        };
+                    }
+                });
+            }
+
+            // 读取考核方式比重工作表
+            const assessmentWeightsSheet = workbook.Sheets[sheetNames.find(name => name.includes('考核方式比重') || name.includes('考核方式') || name.includes('比重'))];
+            if (assessmentWeightsSheet) {
+                const assessmentWeightsData = XLSX.utils.sheet_to_json(assessmentWeightsSheet);
+                if (assessmentWeightsData.length > 0) {
+                    const firstRow = assessmentWeightsData[0];
+                    const assessments = Object.keys(firstRow).filter(key => key !== '考核方式');
+                    data['考核方式比重']['考核方式'] = assessments;
+                    
+                    assessmentWeightsData.forEach(row => {
+                        if (row['考核方式'] && (row['考核方式'].includes('占比') || row['考核方式'].includes('比例'))) {
+                            assessments.forEach(assessment => {
+                                if (!isNaN(row[assessment])) {
+                                    data['考核方式比重']['占比'][assessment] = parseFloat(row[assessment]);
+                                }
+                            });
+                        }
+                    });
+                }
+            }
+
+            // 读取课程目标与考核方式权重矩阵工作表
+            const matrixSheet = workbook.Sheets[sheetNames.find(name => name.includes('课程目标与考核方式权重矩阵') || name.includes('权重矩阵') || name.includes('矩阵'))];
+            if (matrixSheet) {
+                const matrixData = XLSX.utils.sheet_to_json(matrixSheet);
+                if (matrixData.length > 0) {
+                    const firstRow = matrixData[0];
+                    const assessments = Object.keys(firstRow).filter(key => key !== '课程目标');
+                    
+                    // 初始化权重对象
+                    assessments.forEach(assessment => {
+                        data['课程目标与考核方式权重矩阵']['权重'][assessment] = {};
+                    });
+                    
+                    // 填充矩阵数据
+                    matrixData.forEach(row => {
+                        const objective = row['课程目标'];
+                        if (objective) {
+                            data['课程目标与考核方式权重矩阵']['目标'].push(objective);
+                            assessments.forEach(assessment => {
+                                if (!isNaN(row[assessment])) {
+                                    data['课程目标与考核方式权重矩阵']['权重'][assessment][objective] = parseFloat(row[assessment]);
+                                }
+                            });
+                        }
+                    });
+                }
+            }
+
+            // 读取间接达成度工作表
+            const indirectSheet = workbook.Sheets[sheetNames.find(name => name.includes('间接达成度') || name.includes('间接'))];
+            if (indirectSheet) {
+                const indirectData = XLSX.utils.sheet_to_json(indirectSheet);
+                indirectData.forEach(row => {
+                    const objective = row['课程目标'];
+                    if (objective && !isNaN(row['间接达成度'])) {
+                        data['间接达成度'][objective] = parseFloat(row['间接达成度']);
+                    }
+                });
+            }
+
+            return data;
+        }
+
+        // 显示考核方式占比
+        function displayAssessmentWeights(assessmentWeights) {
+            const weightsElement = document.getElementById('assessmentWeights');
+            const weights = assessmentWeights['占比'];
+            const assessmentList = [];
+
+            for (const [assessment, weight] of Object.entries(weights)) {
+                assessmentList.push(`${assessment}: ${weight}%`);
+            }
+
+            let weightsHtml;
+            if (assessmentList.length > 2) {
+                const midIndex = Math.ceil(assessmentList.length / 2);
+                const firstRow = assessmentList.slice(0, midIndex).join(' | ');
+                const secondRow = assessmentList.slice(midIndex).join(' | ');
+                weightsHtml = `${firstRow}<br>${secondRow}`;
+            } else {
+                weightsHtml = assessmentList.join(' | ');
+            }
+
+            weightsElement.innerHTML = `考核方式占比：${weightsHtml}`;
+        }
+
+        // 导出模板
+        function exportTemplate() {
+            try {
+                // 创建模板数据
+                const templateData = {
+                    '课程信息': [
+                        ['课程名称', '示例课程'],
+                        ['课程代码', 'CS101'],
+                        ['学分', 3],
+                        ['授课教师', '张老师'],
+                        ['学期', '2024-2025学年第一学期']
+                    ],
+                    '学生成绩': [
+                        ['学号', '姓名', '预习', '课堂练习', '期中考试', '期末考试'],
+                        ['2024001', '张三', 90, 85, 80, 75],
+                        ['2024002', '李四', 85, 90, 85, 80],
+                        ['2024003', '王五', 95, 92, 88, 85]
+                    ],
+                    '考核方式比重': [
+                        ['考核方式', '预习', '课堂练习', '期中考试', '期末考试'],
+                        ['占比（%）', 10, 20, 30, 40]
+                    ],
+                    '课程目标与考核方式权重矩阵': [
+                        ['课程目标', '预习（%）', '课堂练习（%）', '期中考试（%）', '期末考试（%）'],
+                        ['课程目标1', 40, 30, 25, 20],
+                        ['课程目标2', 30, 40, 35, 40],
+                        ['课程目标3', 30, 30, 40, 40]
+                    ],
+                    '间接达成度': [
+                        ['课程目标', '间接达成度'],
+                        ['课程目标1', 0.95],
+                        ['课程目标2', 0.95],
+                        ['课程目标3', 0.95]
+                    ]
+                };
+
+                // 创建工作簿
+                const workbook = XLSX.utils.book_new();
+
+                // 添加工作表
+                Object.entries(templateData).forEach(([sheetName, data]) => {
+                    const worksheet = XLSX.utils.aoa_to_sheet(data);
+                    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+                });
+
+                // 导出文件
+                XLSX.writeFile(workbook, '课程目标达成度计算模板.xlsx');
+                showAlert('success', '模板已成功导出');
+            } catch (error) {
+                showAlert('danger', `模板导出错误: ${error.message}`);
+            }
+        }
+
+        // 计算达成度
+        function calculateAchievement() {
+            try {
+                calculator.calculate();
+                showAlert('success', '达成度计算完成');
+                
+                // 启用按钮
+                document.getElementById('exportResultsBtn').disabled = false;
+                document.getElementById('plotBtn').disabled = false;
+            } catch (error) {
+                showAlert('danger', `计算过程中出错: ${error.message}`);
+            }
+        }
+
+        // 导出结果
+        function exportResults() {
+            try {
+                // 创建工作簿
+                const workbook = XLSX.utils.book_new();
+
+                // 添加课程信息工作表
+                const courseInfoData = [['项目', '内容']];
+                Object.entries(calculator.data['课程信息']).forEach(([key, value]) => {
+                    courseInfoData.push([key, value]);
+                });
+                const courseInfoWorksheet = XLSX.utils.aoa_to_sheet(courseInfoData);
+                XLSX.utils.book_append_sheet(workbook, courseInfoWorksheet, '课程信息');
+
+                // 添加学生达成度详细结果工作表
+                const studentResults = calculator.results['student_results'];
+                const allObjectives = Object.keys(calculator.results['course_objective_averages']);
+                const allAssessments = Object.keys(calculator.data['考核方式比重']['占比']);
+
+                // 准备表头
+                const studentHeader = ['学号', '姓名'];
+                allObjectives.forEach(objective => {
+                    allAssessments.forEach(assessment => {
+                        studentHeader.push(`${objective} - ${assessment}`);
+                    });
+                });
+                studentHeader.push('总达成度');
+
+                // 准备数据行
+                const studentData = [studentHeader];
+                Object.entries(studentResults).forEach(([studentId, studentInfo]) => {
+                    const row = [studentId, studentInfo['姓名']];
+                    allObjectives.forEach(objective => {
+                        if (studentInfo['课程目标得分'][objective]) {
+                            const contributions = studentInfo['课程目标得分'][objective]['assessment_contributions'];
+                            allAssessments.forEach(assessment => {
+                                row.push(contributions[assessment] || 0);
+                            });
+                        } else {
+                            allAssessments.forEach(() => row.push(0));
+                        }
+                    });
+                    row.push(studentInfo['总达成度']);
+                    studentData.push(row);
+                });
+
+                // 添加课程目标平均达成度
+                const avgRow = ['平均分', ''];
+                allObjectives.forEach(objective => {
+                    const avg = calculator.results['course_objective_averages'][objective];
+                    allAssessments.forEach(() => avgRow.push(avg));
+                });
+                avgRow.push(calculator.results['overall_average']);
+                studentData.push(avgRow);
+
+                const studentWorksheet = XLSX.utils.aoa_to_sheet(studentData);
+                XLSX.utils.book_append_sheet(workbook, studentWorksheet, '学生达成度详细结果');
+
+                // 添加学生各课程目标达成度工作表
+                const objectiveHeader = ['学号', '姓名'];
+                allObjectives.forEach(objective => {
+                    objectiveHeader.push(objective);
+                });
+                objectiveHeader.push('总达成度');
+
+                const objectiveData = [objectiveHeader];
+                Object.entries(studentResults).forEach(([studentId, studentInfo]) => {
+                    const row = [studentId, studentInfo['姓名']];
+                    allObjectives.forEach(objective => {
+                        if (studentInfo['课程目标得分'][objective]) {
+                            row.push(studentInfo['课程目标得分'][objective]['score']);
+                        } else {
+                            row.push(0);
+                        }
+                    });
+                    row.push(studentInfo['总达成度']);
+                    objectiveData.push(row);
+                });
+
+                const objectiveWorksheet = XLSX.utils.aoa_to_sheet(objectiveData);
+                XLSX.utils.book_append_sheet(workbook, objectiveWorksheet, '学生各课程目标达成度');
+
+                // 添加考核方式达成情况工作表
+                const assessmentHeader = ['课程目标'];
+                allAssessments.forEach(assessment => {
+                    assessmentHeader.push(`${assessment} - 目标分值`);
+                    assessmentHeader.push(`${assessment} - 实际分值`);
+                    assessmentHeader.push(`${assessment} - 达成情况评价值`);
+                });
+                assessmentHeader.push('总达成情况评价值');
+
+                const assessmentData = [assessmentHeader];
+                allObjectives.forEach(objective => {
+                    const row = [objective];
+                    let totalTargetScore = 0;
+                    let totalActualScore = 0;
+                    
+                    allAssessments.forEach(assessment => {
+                        // 计算目标分值
+                        const assessmentWeight = calculator.data['考核方式比重']['占比'][assessment] / 100;
+                        const matrixWeight = calculator.data['课程目标与考核方式权重矩阵']['权重'][assessment] && calculator.data['课程目标与考核方式权重矩阵']['权重'][assessment][objective] ? calculator.data['课程目标与考核方式权重矩阵']['权重'][assessment][objective] / 100 : 0;
+                        const targetScore = 100 * assessmentWeight * matrixWeight;
+                        
+                        // 计算实际分值
+                        let actualScore = 0;
+                        let count = 0;
+                        Object.values(studentResults).forEach(studentInfo => {
+                            if (studentInfo['课程目标得分'][objective]) {
+                                const contributions = studentInfo['课程目标得分'][objective]['assessment_contributions'];
+                                if (contributions[assessment]) {
+                                    actualScore += contributions[assessment];
+                                    count++;
+                                }
+                            }
+                        });
+                        actualScore = count > 0 ? actualScore / count : 0;
+                        
+                        // 计算达成情况评价值
+                        const achievementScore = targetScore > 0 ? actualScore / targetScore : 0;
+                        
+                        row.push(targetScore);
+                        row.push(actualScore);
+                        row.push(achievementScore);
+                        
+                        totalTargetScore += targetScore;
+                        totalActualScore += actualScore;
+                    });
+                    
+                    // 计算总达成情况评价值
+                    const totalAchievementScore = totalTargetScore > 0 ? totalActualScore / totalTargetScore : 0;
+                    row.push(totalAchievementScore);
+                    assessmentData.push(row);
+                });
+
+                const assessmentWorksheet = XLSX.utils.aoa_to_sheet(assessmentData);
+                XLSX.utils.book_append_sheet(workbook, assessmentWorksheet, '考核方式达成情况');
+
+                // 导出文件
+                XLSX.writeFile(workbook, '课程目标达成度计算结果.xlsx');
+                showAlert('success', '结果已成功导出');
+            } catch (error) {
+                showAlert('danger', `导出过程中出错: ${error.message}`);
+            }
+        }
+
+        // 显示图表
+        function showPlots() {
+            try {
+                // 获取阈值
+                const threshold = parseFloat(document.getElementById('thresholdInput').value);
+                
+                // 销毁旧图表
+                if (window.charts) {
+                    Object.values(window.charts).forEach(chart => chart.destroy());
+                }
+                window.charts = {};
+                
+                // 创建直接达成度柱状图
+                createDirectAchievementChart(threshold);
+                
+                // 创建间接达成度柱状图
+                createIndirectAchievementChart(threshold);
+                
+                // 创建达成度分布直方图
+                createAchievementHistogram();
+                
+                // 创建每个课程目标的散点图
+                createScatterCharts();
+
+                // 显示图表区域
+                document.getElementById('chartArea').style.display = 'block';
+            } catch (error) {
+                showAlert('danger', `绘图过程中出错: ${error.message}`);
+            }
+        }
+        
+        // 创建直接达成度柱状图
+        function createDirectAchievementChart(threshold) {
+            const ctx = document.getElementById('directAchievementChart').getContext('2d');
+            
+            // 获取数据
+            const objectives = Object.keys(calculator.results['course_objective_averages']);
+            const averages = Object.values(calculator.results['course_objective_averages']);
+
+            // 准备数据
+            const data = {
+                labels: objectives,
+                datasets: [{
+                    label: '课程目标直接达成度',
+                    data: averages,
+                    backgroundColor: averages.map(value => value >= threshold ? 'rgba(75, 192, 192, 0.6)' : 'rgba(255, 99, 132, 0.6)'),
+                    borderColor: averages.map(value => value >= threshold ? 'rgba(75, 192, 192, 1)' : 'rgba(255, 99, 132, 1)'),
+                    borderWidth: 1
+                }]
+            };
+
+            // 创建图表
+            window.charts.directAchievement = new Chart(ctx, {
+                type: 'bar',
+                data: data,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 1,
+                            ticks: {
+                                callback: function(value) {
+                                    return (value * 100).toFixed(0) + '%';
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: true,
+                            text: '课程目标直接达成度分析'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `达成度: ${(context.parsed.y * 100).toFixed(2)}%`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 创建间接达成度柱状图
+        function createIndirectAchievementChart(threshold) {
+            const ctx = document.getElementById('indirectAchievementChart').getContext('2d');
+            
+            // 获取间接达成度数据
+            const indirectAchievements = calculator.data['间接达成度'] || {};
+            
+            // 准备数据
+            const objectives = Object.keys(indirectAchievements);
+            const values = Object.values(indirectAchievements);
+            
+            // 准备数据
+            const data = {
+                labels: objectives.length > 0 ? objectives : ['无数据'],
+                datasets: [{
+                    label: '课程目标间接达成度',
+                    data: values.length > 0 ? values : [0],
+                    backgroundColor: values.length > 0 ? values.map(value => value >= threshold ? 'rgba(144, 238, 144, 0.6)' : 'rgba(255, 160, 122, 0.6)') : 'rgba(200, 200, 200, 0.6)',
+                    borderColor: values.length > 0 ? values.map(value => value >= threshold ? 'rgba(144, 238, 144, 1)' : 'rgba(255, 160, 122, 1)') : 'rgba(200, 200, 200, 1)',
+                    borderWidth: 1
+                }]
+            };
+
+            // 创建图表
+            window.charts.indirectAchievement = new Chart(ctx, {
+                type: 'bar',
+                data: data,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 1,
+                            ticks: {
+                                callback: function(value) {
+                                    return (value * 100).toFixed(0) + '%';
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: true,
+                            text: '课程目标间接达成度分析'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `达成度: ${(context.parsed.y * 100).toFixed(2)}%`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 创建达成度分布直方图
+        function createAchievementHistogram() {
+            const ctx = document.getElementById('achievementHistogramChart').getContext('2d');
+            
+            // 获取所有学生的总达成度
+            const achievements = Object.values(calculator.results['student_results']).map(student => student['总达成度']);
+            
+            // 准备数据
+            const data = {
+                labels: ['0-10%', '10-20%', '20-30%', '30-40%', '40-50%', '50-60%', '60-70%', '70-80%', '80-90%', '90-100%'],
+                datasets: [{
+                    label: '学生人数',
+                    data: calculateHistogramData(achievements),
+                    backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1
+                }]
+            };
+
+            // 创建图表
+            window.charts.achievementHistogram = new Chart(ctx, {
+                type: 'bar',
+                data: data,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: true,
+                            text: '学生总达成度分布直方图'
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 计算直方图数据
+        function calculateHistogramData(achievements) {
+            const bins = new Array(10).fill(0);
+            achievements.forEach(achievement => {
+                const binIndex = Math.min(Math.floor(achievement * 10), 9);
+                bins[binIndex]++;
+            });
+            return bins;
+        }
+        
+        // 创建每个课程目标的散点图
+        function createScatterCharts() {
+            const objectives = Object.keys(calculator.results['course_objective_averages']);
+            const tabContainer = document.querySelector('#chartTabs');
+            const contentContainer = document.querySelector('#chartArea .tab-content');
+            
+            // 清除现有的散点图标签页
+            const existingScatterTabs = tabContainer.querySelectorAll('.nav-item.scatter-tab');
+            existingScatterTabs.forEach(tab => tab.remove());
+            
+            const existingScatterPanes = contentContainer.querySelectorAll('.tab-pane.scatter-pane');
+            existingScatterPanes.forEach(pane => pane.remove());
+            
+            // 为每个课程目标创建散点图
+            objectives.forEach((objective, index) => {
+                // 创建标签
+                const tabId = `scatter-${index}`;
+                const paneId = `scatterContent-${index}`;
+                
+                // 添加标签到导航栏
+                const tabLi = document.createElement('li');
+                tabLi.className = 'nav-item scatter-tab';
+                tabLi.role = 'presentation';
+                tabLi.innerHTML = `
+                    <button class="nav-link" id="${tabId}-tab" data-bs-toggle="tab" data-bs-target="#${paneId}" type="button" role="tab" aria-controls="${paneId}" aria-selected="false">${objective} 散点图</button>
+                `;
+                tabContainer.appendChild(tabLi);
+                
+                // 添加内容面板
+                const paneDiv = document.createElement('div');
+                paneDiv.className = 'tab-pane fade scatter-pane';
+                paneDiv.id = paneId;
+                paneDiv.role = 'tabpanel';
+                paneDiv.setAttribute('aria-labelledby', `${tabId}-tab`);
+                paneDiv.innerHTML = `
+                    <div class="chart-container">
+                        <canvas id="scatterChart-${index}"></canvas>
+                    </div>
+                `;
+                contentContainer.appendChild(paneDiv);
+                
+                // 创建散点图
+                createObjectiveScatterChart(objective, index);
+            });
+        }
+        
+        // 创建单个课程目标的散点图
+        function createObjectiveScatterChart(objective, index) {
+            const ctx = document.getElementById(`scatterChart-${index}`).getContext('2d');
+            
+            // 获取所有学生的该课程目标得分
+            const studentResults = calculator.results['student_results'];
+            const scores = [];
+            const studentIndices = [];
+            
+            let i = 1;
+            for (const [studentId, studentInfo] of Object.entries(studentResults)) {
+                if (studentInfo['课程目标得分'][objective]) {
+                    scores.push(studentInfo['课程目标得分'][objective]['score']);
+                    studentIndices.push(i++);
+                }
+            }
+            
+            // 准备数据
+            const data = {
+                datasets: [{
+                    label: `${objective} 达成度`,
+                    data: scores.map((score, i) => ({x: studentIndices[i], y: score})),
+                    backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1,
+                    pointRadius: 5,
+                    pointHoverRadius: 7
+                }]
+            };
+
+            // 创建图表
+            window.charts[`scatter-${index}`] = new Chart(ctx, {
+                type: 'scatter',
+                data: data,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: '学生序号'
+                            },
+                            beginAtZero: true
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: '达成度'
+                            },
+                            beginAtZero: true,
+                            max: 1,
+                            ticks: {
+                                callback: function(value) {
+                                    return (value * 100).toFixed(0) + '%';
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: true,
+                            text: `${objective} 学生达成度散点图`
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `达成度: ${(context.parsed.y * 100).toFixed(2)}%`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 显示提示信息
+        function showAlert(type, message) {
+            const statusMessage = document.getElementById('statusMessage');
+            statusMessage.className = `alert alert-${type} text-center status-message`;
+            statusMessage.textContent = message;
+        }
+
+        // 达成度计算器类
+        class AchievementCalculator {
+            constructor(data) {
+                this.data = data;
+                this.results = null;
+            }
+
+            validate_data() {
+                const errors = [];
+
+                // 检查是否包含所有必要的工作表数据
+                if (Object.keys(this.data['课程信息']).length === 0) {
+                    errors.push('缺少课程信息数据');
+                }
+
+                if (Object.keys(this.data['学生成绩']).length === 0) {
+                    errors.push('缺少学生成绩数据');
+                }
+
+                if (Object.keys(this.data['考核方式比重']['占比']).length === 0) {
+                    errors.push('缺少考核方式比重数据');
+                }
+
+                if (this.data['课程目标与考核方式权重矩阵']['目标'].length === 0) {
+                    errors.push('缺少课程目标与考核方式权重矩阵数据');
+                }
+
+                // 验证考核方式比重总和是否为100%
+                const assessmentWeights = this.data['考核方式比重'];
+                if (Object.keys(assessmentWeights['占比']).length > 0) {
+                    const totalWeight = Object.values(assessmentWeights['占比']).reduce((sum, weight) => sum + weight, 0);
+                    if (Math.abs(totalWeight - 100) > 0.01) {
+                        errors.push(`考核方式比重总和不为100%，当前总和为: ${totalWeight.toFixed(2)}%`);
+                    }
+                }
+
+                // 验证课程目标与考核方式权重矩阵每列之和是否为100%
+                const matrix = this.data['课程目标与考核方式权重矩阵'];
+                if (matrix['目标'].length > 0 && Object.keys(matrix['权重']).length > 0) {
+                    for (const assessment in matrix['权重']) {
+                        const columnSum = Object.values(matrix['权重'][assessment]).reduce((sum, weight) => sum + weight, 0);
+                        if (Math.abs(columnSum - 100) > 0.01) {
+                            errors.push(`考核方式 '${assessment}' 的权重分配总和不为100%，当前总和为: ${columnSum.toFixed(2)}%`);
+                        }
+                    }
+                }
+
+                if (errors.length > 0) {
+                    return { valid: false, message: errors.join('\n') };
+                } else {
+                    return { valid: true, message: '数据验证通过' };
+                }
+            }
+
+            calculate() {
+                // 获取数据
+                const studentScores = this.data['学生成绩'];
+                const assessmentWeights = this.data['考核方式比重'];
+                const matrix = this.data['课程目标与考核方式权重矩阵'];
+
+                // 计算每个学生的总课程达成度
+                const results = {
+                    'student_results': {},
+                    'course_objective_averages': {},
+                    'overall_average': 0.0
+                };
+
+                // 计算每位学生的课程目标达成度
+                for (const [studentId, studentInfo] of Object.entries(studentScores)) {
+                    const studentName = studentInfo['姓名'];
+                    const scores = studentInfo['成绩'];
+
+                    // 计算每个课程目标的得分
+                    const courseObjectiveScores = {};
+                    let totalAchievement = 0.0;
+                    let objectiveCount = 0;
+
+                    for (const objective of matrix['目标']) {
+                        let numerator = 0.0;  // 分子：学生成绩 × (考核占比 × 课程目标权重)
+                        let denominator = 0.0;  // 分母：100 × (考核占比 × 课程目标权重)
+
+                        // 保存每个考核方式的贡献值
+                        const assessmentContributions = {};
+
+                        for (const assessment in matrix['权重']) {
+                            if (assessment in scores && assessment in assessmentWeights['占比']) {
+                                // 计算该考核方式的实际得分
+                                const assessmentScore = scores[assessment];
+                                // 获取考核方式在总成绩中的比重
+                                const assessmentWeight = assessmentWeights['占比'][assessment] / 100;
+                                // 获取该课程目标在该考核方式中的权重
+                                const matrixWeight = matrix['权重'][assessment][objective] / 100;
+
+                                // 计算该考核方式对当前课程目标的贡献值
+                                const contribution = assessmentScore * assessmentWeight * matrixWeight;
+                                assessmentContributions[assessment] = contribution;
+
+                                // 累加分子和分母
+                                numerator += contribution;
+                                denominator += 100 * assessmentWeight * matrixWeight;
+                            }
+                        }
+
+                        // 计算达成度：分子/分母（保留原始小数形式）
+                        const objectiveAchievement = denominator !== 0 ? numerator / denominator : 0;
+
+                        // 保存课程目标得分和每个考核方式的贡献值
+                        courseObjectiveScores[objective] = {
+                            'score': objectiveAchievement,
+                            'assessment_contributions': assessmentContributions
+                        };
+                        totalAchievement += objectiveAchievement;
+                        objectiveCount++;
+                    }
+
+                    // 计算学生总达成度（所有目标的平均分）
+                    const overallAchievement = objectiveCount > 0 ? totalAchievement / objectiveCount : 0;
+
+                    results['student_results'][studentId] = {
+                        '姓名': studentName,
+                        '课程目标得分': courseObjectiveScores,
+                        '总达成度': overallAchievement
+                    };
+                }
+
+                // 计算每个课程目标的班级平均达成度
+                const objectiveScores = {};
+                for (const [studentId, studentInfo] of Object.entries(results['student_results'])) {
+                    for (const [objective, scoreData] of Object.entries(studentInfo['课程目标得分'])) {
+                        if (!objectiveScores[objective]) {
+                            objectiveScores[objective] = [];
+                        }
+                        objectiveScores[objective].push(scoreData['score']);
+                    }
+                }
+
+                for (const [objective, scores] of Object.entries(objectiveScores)) {
+                    results['course_objective_averages'][objective] = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+                }
+
+                // 计算全体学生的总达成度平均
+                const totalAchievements = Object.values(results['student_results']).map(student => student['总达成度']);
+                results['overall_average'] = totalAchievements.length > 0 ? totalAchievements.reduce((sum, score) => sum + score, 0) / totalAchievements.length : 0;
+
+                this.results = results;
+                return results;
+            }
+        }
+    </script>
+</body>
+</html>
